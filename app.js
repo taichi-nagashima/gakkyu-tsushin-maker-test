@@ -8,7 +8,7 @@
   // ---------- Constants ----------
   // キャッシュ対策バージョン：index.html の <meta name="asset-version"> と各 ?v= と必ず同じ値にする
   // （更新時は index.html と app.js の現在の値をまとめて置換。ずれているとコンソールに警告が出ます）
-  const APP_VERSION = '2026112604';
+  const APP_VERSION = '2026112605';
   const KEYS = {
     state: 'home_newsletter_state_v1',
     base: 'home_newsletter_default_schedule_v1',
@@ -509,7 +509,9 @@
     // header
     els.pvLogoText.textContent = s.logoText || 'HOME';
     els.pvSchoolName.textContent = s.schoolName || '';
-    els.pvClassIssue.textContent = `${s.className || ''} 第${s.issueNumber || '〇'}号`;
+    els.pvClassIssue.innerHTML =
+      `<span class="pv-class-name">${escapeHtml(s.className || '')}</span>` +
+      `<span class="pv-issue-badge">第${escapeHtml(s.issueNumber || '〇')}号</span>`;
     els.pvPublisher.textContent = `発行者 ${s.publisherName || ''}`;
     els.pvIssueDate.textContent = eraDate(s.issueDate);
 
@@ -528,7 +530,12 @@
     els.parentsCount.textContent = `${(s.parentsNote || '').length}文字`;
 
     // schedule
-    els.pvScheduleBanner.textContent = bannerText();
+    const apron = apronText();
+    els.pvScheduleBanner.innerHTML =
+      `<div class="schedule-banner-inner">` +
+      `<span class="schedule-banner-title">来週の予定（${escapeHtml(weekRangeText())}）</span>` +
+      (apron ? `<span class="schedule-apron-badge">要エプロン持参 ${escapeHtml(apron)}班</span>` : '') +
+      `</div>`;
     renderPreviewSchedule();
 
     // fit
@@ -609,7 +616,10 @@
         } else {
           row.periods.forEach((p) => tr.appendChild(td('cell-period', formatPeriodText(p))));
         }
-        ['lunch', 'clean', 'club'].forEach((k) => tr.appendChild(td('cell-flag', row[k] || '')));
+        ['lunch', 'clean', 'club'].forEach((k) => {
+          const val = row[k] || '';
+          tr.appendChild(td(val === '×' ? 'cell-flag is-off' : 'cell-flag', val));
+        });
       }
       tr.appendChild(td('cell-note', rowNoteText(row)));
       tbody.appendChild(tr);
@@ -1229,6 +1239,8 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
       parentsFontSize: fitResult.parents.size,
       issueDateText: eraDate(state.issueDate),
       scheduleBannerText: bannerText(),
+      scheduleWeekRangeText: weekRangeText(),
+      apronText: apronText(),
       weekDates: cells.map((c) => ({ month: c.month, dayLabel: c.dayLabel })),
       monthSpans: monthSpans(cells),
       scheduleRows: state.schedule.map((r) => ({

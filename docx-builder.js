@@ -1,12 +1,13 @@
 /* ==========================================================
    HOME 学級通信メーカー - Pure JS OOXML (.docx) Builder
    Word / Googleドキュメント完全対応（外部依存ゼロ）
+   エディトリアル×知的ネイビー・デザイン対応版
    ========================================================== */
 
 window.HomeDocxBuilder = (() => {
   'use strict';
 
-  // ---------- Minimal Standard ZIP Writer (Store / Method 0) ----------
+  // ---------- Minimal Standard ZIP Writer (Store / Deflate) ----------
   const CRC_TABLE = (() => {
     const table = new Uint32Array(256);
     for (let n = 0; n < 256; n++) {
@@ -26,17 +27,18 @@ window.HomeDocxBuilder = (() => {
     }
     return (crc ^ 0xffffffff) >>> 0;
   }
+
   async function compressDeflateRaw(bytes) {
-     if (typeof CompressionStream !== 'function') return null;
-     try {
-        const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
-        const compressedBuffer = await new Response(stream).arrayBuffer();
-        return new Uint8Array(compressedBuffer);
-        } catch (_err) {
-        return null;
-     }
+    if (typeof CompressionStream !== 'function') return null;
+    try {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      const compressedBuffer = await new Response(stream).arrayBuffer();
+      return new Uint8Array(compressedBuffer);
+    } catch (_err) {
+      return null;
+    }
   }
-   
+
   async function createZipBlob(entries, mimeType) {
     const encoder = new TextEncoder();
     const localParts = [];
@@ -53,24 +55,24 @@ window.HomeDocxBuilder = (() => {
       const crc = crc32(dataBytes);
       const size = dataBytes.length;
       const isCompressible = typeof entry.data === 'string' || /\.(xml|rels|txt)$/i.test(entry.name);
-       let payloadBytes = dataBytes;
-       let method = 0;
-       if (isCompressible && size > 0) {
-          const compressed = await compressDeflateRaw(dataBytes);
-          if (compressed && compressed.length < size) {
-             payloadBytes = compressed;
-             method = 8;
-            }
-       }
-       const compressedSize = payloadBytes.length;
-       
+      let payloadBytes = dataBytes;
+      let method = 0;
+      if (isCompressible && size > 0) {
+        const compressed = await compressDeflateRaw(dataBytes);
+        if (compressed && compressed.length < size) {
+          payloadBytes = compressed;
+          method = 8;
+        }
+      }
+      const compressedSize = payloadBytes.length;
+
       // Local File Header (30 bytes + name)
       const localHeader = new Uint8Array(30 + nameBytes.length);
       const lv = new DataView(localHeader.buffer);
       lv.setUint32(0, 0x04034b50, true); // signature
       lv.setUint16(4, 20, true);         // version needed
       lv.setUint16(6, 0x0800, true);     // UTF-8 flag
-      lv.setUint16(8, method, true);          // method: store
+      lv.setUint16(8, method, true);     // method
       lv.setUint16(10, dosTime, true);
       lv.setUint16(12, dosDate, true);
       lv.setUint32(14, crc, true);
@@ -89,7 +91,7 @@ window.HomeDocxBuilder = (() => {
       cv.setUint16(4, 20, true);         // version made by
       cv.setUint16(6, 20, true);         // version needed
       cv.setUint16(8, 0x0800, true);     // UTF-8 flag
-      cv.setUint16(10, method, true);         // method: store
+      cv.setUint16(10, method, true);    // method
       cv.setUint16(12, dosTime, true);
       cv.setUint16(14, dosDate, true);
       cv.setUint32(16, crc, true);
@@ -187,31 +189,40 @@ window.HomeDocxBuilder = (() => {
     return [t];
   }
 
-  function rPr({ sizeHalfPt = 20, bold = false, italic = false, color = '111111', font = 'Meiryo' } = {}) {
+  // EG_RPrBase order: rFonts -> b/bCs -> i/iCs -> color -> sz/szCs -> shd
+  function rPr({ sizeHalfPt = 20, bold = false, italic = false, color = '1A202C', font = 'Meiryo', fill = '' } = {}) {
     return `<w:rPr>
       <w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="${font}"/>
       ${bold ? '<w:b/><w:bCs/>' : ''}
       ${italic ? '<w:i/><w:iCs/>' : ''}
       <w:color w:val="${color}"/>
       <w:sz w:val="${sizeHalfPt}"/><w:szCs w:val="${sizeHalfPt}"/>
+      ${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}
     </w:rPr>`;
   }
 
-  // CT_PPrBase order: spacing -> jc
+  // CT_PPrBase order: pBdr -> shd -> spacing -> ind -> jc
   function makeParagraph(text, {
     align = 'left',
     sizeHalfPt = 20,
     bold = false,
     italic = false,
-    color = '111111',
+    color = '1A202C',
     spaceBefore = 0,
     spaceAfter = 40,
     line = 280,
-    font = 'Meiryo'
+    font = 'Meiryo',
+    pBdrXml = '',
+    shdFill = '',
+    indentLeft = 0,
+    indentRight = 0
   } = {}) {
     return `<w:p>
       <w:pPr>
+        ${pBdrXml}
+        ${shdFill ? `<w:shd w:val="clear" w:color="auto" w:fill="${shdFill}"/>` : ''}
         <w:spacing w:before="${spaceBefore}" w:after="${spaceAfter}" w:line="${line}" w:lineRule="auto"/>
+        ${(indentLeft || indentRight) ? `<w:ind w:left="${indentLeft}" w:right="${indentRight}"/>` : ''}
         <w:jc w:val="${align}"/>
       </w:pPr>
       <w:r>
@@ -309,13 +320,31 @@ window.HomeDocxBuilder = (() => {
 
     // ---------- 左カラム構築 ----------
     const logoFontRun = `<w:r>
-      ${rPr({ sizeHalfPt: 60, bold: true, italic: true, color: '9E1B1E', font: 'Arial' })}
+      ${rPr({ sizeHalfPt: 58, bold: true, italic: true, color: '9E1B1E', font: 'Arial' })}
       <w:t xml:space="preserve">${xmlEsc(data.logoText || 'HOME')} </w:t>
     </w:r>`;
 
     const houseDrawing = houseRId
-      ? makeInlineDrawing(houseRId, 570000, 476000, nextDocPrId++, 'HouseIllustration')
+      ? makeInlineDrawing(houseRId, 555000, 464000, nextDocPrId++, 'HouseIllustration')
       : '';
+
+    const classIssueParagraphXml = `<w:p>
+      <w:pPr>
+        <w:pBdr>
+          <w:bottom w:val="dashed" w:sz="6" w:space="3" w:color="94A3B8"/>
+        </w:pBdr>
+        <w:spacing w:before="15" w:after="35" w:line="230" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        ${rPr({ sizeHalfPt: 20, bold: true, color: '0F172A' })}
+        <w:t xml:space="preserve">${xmlEsc(data.className || '')} </w:t>
+      </w:r>
+      <w:r>
+        ${rPr({ sizeHalfPt: 17, bold: true, color: 'FFFFFF', fill: '1E3A5F' })}
+        <w:t xml:space="preserve"> 第${xmlEsc(data.issueNumber || '〇')}号 </w:t>
+      </w:r>
+    </w:p>`;
 
     // CT_TblPrBase order: tblW -> jc -> tblBorders -> tblLayout -> tblCellMar
     const headerBoxXml = `<w:tbl>
@@ -323,24 +352,28 @@ window.HomeDocxBuilder = (() => {
         <w:tblW w:w="7720" w:type="dxa"/>
         <w:jc w:val="center"/>
         <w:tblBorders>
-          <w:top w:val="single" w:sz="10" w:space="0" w:color="222222"/>
-          <w:left w:val="single" w:sz="10" w:space="0" w:color="222222"/>
-          <w:bottom w:val="single" w:sz="10" w:space="0" w:color="222222"/>
-          <w:right w:val="single" w:sz="10" w:space="0" w:color="222222"/>
+          <w:top w:val="single" w:sz="12" w:space="0" w:color="1E3A5F"/>
+          <w:left w:val="single" w:sz="30" w:space="0" w:color="9E1B1E"/>
+          <w:bottom w:val="single" w:sz="12" w:space="0" w:color="1E3A5F"/>
+          <w:right w:val="single" w:sz="12" w:space="0" w:color="1E3A5F"/>
           <w:insideH w:val="none"/>
-          <w:insideV w:val="single" w:sz="10" w:space="0" w:color="222222"/>
+          <w:insideV w:val="single" w:sz="10" w:space="0" w:color="1E3A5F"/>
         </w:tblBorders>
         <w:tblLayout w:type="fixed"/>
         <w:tblCellMar>
-          <w:top w:w="70" w:type="dxa"/><w:left w:w="100" w:type="dxa"/>
-          <w:bottom w:w="70" w:type="dxa"/><w:right w:w="100" w:type="dxa"/>
+          <w:top w:w="65" w:type="dxa"/><w:left w:w="100" w:type="dxa"/>
+          <w:bottom w:w="65" w:type="dxa"/><w:right w:w="100" w:type="dxa"/>
         </w:tblCellMar>
       </w:tblPr>
-      <w:tblGrid><w:gridCol w:w="4120"/><w:gridCol w:w="3600"/></w:tblGrid>
+      <w:tblGrid><w:gridCol w:w="4090"/><w:gridCol w:w="3630"/></w:tblGrid>
       <w:tr>
         <w:trPr><w:trHeight w:val="1200" w:hRule="atLeast"/></w:trPr>
         <w:tc>
-          <w:tcPr><w:tcW w:w="4120" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>
+          <w:tcPr>
+            <w:tcW w:w="4090" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="FCFAF5"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
           <w:p>
             <w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr>
             ${logoFontRun}
@@ -348,60 +381,84 @@ window.HomeDocxBuilder = (() => {
           </w:p>
         </w:tc>
         <w:tc>
-          <w:tcPr><w:tcW w:w="3600" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>
-          ${makeParagraph(data.schoolName || '', { sizeHalfPt: 19, spaceAfter: 20, line: 225 })}
-          ${makeParagraph(`${data.className || ''} 第${data.issueNumber || '〇'}号`, { sizeHalfPt: 19, spaceAfter: 20, line: 225 })}
-          ${makeParagraph(`発行者 ${data.publisherName || ''}`, { sizeHalfPt: 19, spaceAfter: 20, line: 225 })}
-          ${makeParagraph(data.issueDateText || '', { sizeHalfPt: 18, spaceAfter: 0, line: 225 })}
+          <w:tcPr>
+            <w:tcW w:w="3630" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="F4F7FB"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          ${makeParagraph(data.schoolName || '', { sizeHalfPt: 17, bold: true, color: '475569', spaceAfter: 15, line: 215 })}
+          ${classIssueParagraphXml}
+          ${makeParagraph(`発行者 ${data.publisherName || ''}`, { sizeHalfPt: 17, bold: false, color: '334155', spaceAfter: 15, line: 215 })}
+          ${makeParagraph(data.issueDateText || '', { sizeHalfPt: 17, bold: true, color: '1E3A5F', spaceAfter: 0, line: 215 })}
         </w:tc>
       </w:tr>
     </w:tbl>`;
 
+    const articleTitleBordersXml = `<w:pBdr>
+      <w:top w:val="single" w:sz="4" w:space="4" w:color="D5DFEC"/>
+      <w:left w:val="single" w:sz="30" w:space="8" w:color="1E3A5F"/>
+      <w:bottom w:val="single" w:sz="12" w:space="5" w:color="1E3A5F"/>
+      <w:right w:val="single" w:sz="4" w:space="4" w:color="E2E8F0"/>
+    </w:pBdr>`;
+
     const articleSizeHalfPt = Math.max(16, Math.round(parseFloat(data.articleFontSize || 13.5) * 1.48));
     const leftColumnContent =
       headerBoxXml +
+      emptySpacerP(80) +
       makeParagraph(data.articleTitle || 'タイトル', {
-        align: 'center',
-        sizeHalfPt: 40,
+        align: 'left',
+        sizeHalfPt: 30,
         bold: true,
-        spaceBefore: 140,
-        spaceAfter: 100,
-        line: 260
+        color: data.articleTitle ? '0F172A' : '94A3B8',
+        pBdrXml: articleTitleBordersXml,
+        shdFill: 'F3F7FC',
+        indentLeft: 40,
+        indentRight: 40,
+        spaceBefore: 40,
+        spaceAfter: 120,
+        line: 270
       }) +
       makeMultilineParagraphs(data.articleBody || '', {
         align: 'left',
         sizeHalfPt: articleSizeHalfPt,
+        color: '1A202C',
         spaceBefore: 0,
         spaceAfter: 50,
         line: 290
       });
 
     // ---------- 右カラム：① フォトコーナー ----------
-    let photoInnerXml = '';
+    let photoInnerXml = emptySpacerP(40);
     if (embeddedPhotos.length === 1) {
       const p = embeddedPhotos[0];
-      const fit = fitBoxEmu(p.width, p.height, 4100000, 1500000);
-      photoInnerXml = `<w:p><w:pPr><w:spacing w:before="40" w:after="20"/><w:jc w:val="center"/></w:pPr>
+      const fit = fitBoxEmu(p.width, p.height, 4100000, 1420000);
+      photoInnerXml = `<w:p><w:pPr><w:spacing w:before="30" w:after="20"/><w:jc w:val="center"/></w:pPr>
         ${makeInlineDrawing(p.rId, fit.cx, fit.cy, nextDocPrId++, 'Photo1')}</w:p>` +
-        (p.caption ? makeParagraph(p.caption, { align: 'center', sizeHalfPt: 16, spaceAfter: 0, line: 200 }) : '');
+        (p.caption ? makeParagraph(p.caption, { align: 'center', sizeHalfPt: 16, bold: true, color: '334155', spaceAfter: 0, line: 200 }) : '');
     } else if (embeddedPhotos.length === 2 || embeddedPhotos.length === 3) {
       const cols = embeddedPhotos.length;
       const cellW = Math.floor(7500 / cols);
-      const maxImgW = cols === 2 ? 2150000 : 1420000;
-      const maxImgH = 1440000;
+      const maxImgW = cols === 2 ? 2120000 : 1400000;
+      const maxImgH = 1360000;
       const gridCols = Array(cols).fill(`<w:gridCol w:w="${cellW}"/>`).join('');
       const cells = embeddedPhotos.map((p, idx) => {
         const fit = fitBoxEmu(p.width, p.height, maxImgW, maxImgH);
-        // CT_TcPrBase order: tcW -> tcBorders -> vAlign
+        // CT_TcPrBase order: tcW -> tcBorders -> shd -> vAlign
         return `<w:tc>
           <w:tcPr>
             <w:tcW w:w="${cellW}" w:type="dxa"/>
-            <w:tcBorders><w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/></w:tcBorders>
+            <w:tcBorders>
+              <w:top w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+              <w:left w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+              <w:bottom w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+              <w:right w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+            </w:tcBorders>
+            <w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/>
             <w:vAlign w:val="center"/>
           </w:tcPr>
           <w:p><w:pPr><w:spacing w:before="20" w:after="20"/><w:jc w:val="center"/></w:pPr>
             ${makeInlineDrawing(p.rId, fit.cx, fit.cy, nextDocPrId++, `Photo${idx + 1}`)}</w:p>
-          ${p.caption ? makeParagraph(p.caption, { align: 'center', sizeHalfPt: 15, spaceAfter: 0, line: 190 }) : ''}
+          ${p.caption ? makeParagraph(p.caption, { align: 'center', sizeHalfPt: 15, bold: true, color: '334155', spaceAfter: 10, line: 190 }) : ''}
         </w:tc>`;
       }).join('');
       photoInnerXml = `<w:tbl>
@@ -417,16 +474,22 @@ window.HomeDocxBuilder = (() => {
     } else if (embeddedPhotos.length === 4) {
       const cellW = 3750;
       const makeRow = (pair, startIdx) => `<w:tr>${pair.map((p, i) => {
-        const fit = fitBoxEmu(p.width, p.height, 2000000, 720000);
+        const fit = fitBoxEmu(p.width, p.height, 1980000, 680000);
         return `<w:tc>
           <w:tcPr>
             <w:tcW w:w="${cellW}" w:type="dxa"/>
-            <w:tcBorders><w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/></w:tcBorders>
+            <w:tcBorders>
+              <w:top w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+              <w:left w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+              <w:bottom w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+              <w:right w:val="single" w:sz="4" w:space="0" w:color="E5DCC8"/>
+            </w:tcBorders>
+            <w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/>
             <w:vAlign w:val="center"/>
           </w:tcPr>
           <w:p><w:pPr><w:spacing w:before="15" w:after="10"/><w:jc w:val="center"/></w:pPr>
             ${makeInlineDrawing(p.rId, fit.cx, fit.cy, nextDocPrId++, `Photo${startIdx + i + 1}`)}</w:p>
-          ${p.caption ? makeParagraph(p.caption, { align: 'center', sizeHalfPt: 14, spaceAfter: 0, line: 170 }) : ''}
+          ${p.caption ? makeParagraph(p.caption, { align: 'center', sizeHalfPt: 14, bold: true, color: '334155', spaceAfter: 10, line: 170 }) : ''}
         </w:tc>`;
       }).join('')}</w:tr>`;
       photoInnerXml = `<w:tbl>
@@ -447,27 +510,39 @@ window.HomeDocxBuilder = (() => {
         <w:tblW w:w="7900" w:type="dxa"/>
         <w:jc w:val="center"/>
         <w:tblBorders>
-          <w:top w:val="single" w:sz="24" w:space="0" w:color="D49B27"/>
-          <w:left w:val="single" w:sz="24" w:space="0" w:color="D49B27"/>
-          <w:bottom w:val="single" w:sz="24" w:space="0" w:color="D49B27"/>
-          <w:right w:val="single" w:sz="24" w:space="0" w:color="D49B27"/>
+          <w:top w:val="single" w:sz="12" w:space="0" w:color="C98A18"/>
+          <w:left w:val="single" w:sz="12" w:space="0" w:color="C98A18"/>
+          <w:bottom w:val="single" w:sz="12" w:space="0" w:color="C98A18"/>
+          <w:right w:val="single" w:sz="12" w:space="0" w:color="C98A18"/>
+          <w:insideH w:val="single" w:sz="10" w:space="0" w:color="C98A18"/>
+          <w:insideV w:val="none"/>
         </w:tblBorders>
         <w:tblLayout w:type="fixed"/>
         <w:tblCellMar>
-          <w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/>
-          <w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/>
+          <w:top w:w="50" w:type="dxa"/><w:left w:w="100" w:type="dxa"/>
+          <w:bottom w:w="50" w:type="dxa"/><w:right w:w="100" w:type="dxa"/>
         </w:tblCellMar>
       </w:tblPr>
       <w:tblGrid><w:gridCol w:w="7900"/></w:tblGrid>
       <w:tr>
-        <w:trPr><w:trHeight w:val="3050" w:hRule="atLeast"/></w:trPr>
+        <w:trPr><w:trHeight w:val="380" w:hRule="atLeast"/></w:trPr>
         <w:tc>
           <w:tcPr>
             <w:tcW w:w="7900" w:type="dxa"/>
-            <w:shd w:val="clear" w:color="auto" w:fill="FAD57B"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="FDE99C"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          ${makeParagraph(`◆ ${data.photoCornerTitle || 'フォトコーナー'} ◆`, { align: 'center', sizeHalfPt: 20, bold: true, color: '78350F', spaceAfter: 0, line: 220 })}
+        </w:tc>
+      </w:tr>
+      <w:tr>
+        <w:trPr><w:trHeight w:val="2670" w:hRule="atLeast"/></w:trPr>
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="7900" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="FFFDF7"/>
             <w:vAlign w:val="top"/>
           </w:tcPr>
-          ${makeParagraph(data.photoCornerTitle || 'フォトコーナー', { align: 'center', sizeHalfPt: 24, bold: true, spaceAfter: 50, line: 230 })}
           ${photoInnerXml}
         </w:tc>
       </w:tr>
@@ -480,58 +555,119 @@ window.HomeDocxBuilder = (() => {
         <w:tblW w:w="7900" w:type="dxa"/>
         <w:jc w:val="center"/>
         <w:tblBorders>
-          <w:top w:val="dashed" w:sz="24" w:space="0" w:color="5B8A49"/>
-          <w:left w:val="dashed" w:sz="24" w:space="0" w:color="5B8A49"/>
-          <w:bottom w:val="dashed" w:sz="24" w:space="0" w:color="5B8A49"/>
-          <w:right w:val="dashed" w:sz="24" w:space="0" w:color="5B8A49"/>
+          <w:top w:val="single" w:sz="12" w:space="0" w:color="276749"/>
+          <w:left w:val="single" w:sz="12" w:space="0" w:color="276749"/>
+          <w:bottom w:val="single" w:sz="12" w:space="0" w:color="276749"/>
+          <w:right w:val="single" w:sz="12" w:space="0" w:color="276749"/>
+          <w:insideH w:val="single" w:sz="12" w:space="0" w:color="1E4E38"/>
+          <w:insideV w:val="none"/>
         </w:tblBorders>
         <w:tblLayout w:type="fixed"/>
         <w:tblCellMar>
-          <w:top w:w="90" w:type="dxa"/><w:left w:w="140" w:type="dxa"/>
-          <w:bottom w:w="80" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
+          <w:top w:w="50" w:type="dxa"/><w:left w:w="140" w:type="dxa"/>
+          <w:bottom w:w="50" w:type="dxa"/><w:right w:w="140" w:type="dxa"/>
         </w:tblCellMar>
       </w:tblPr>
       <w:tblGrid><w:gridCol w:w="7900"/></w:tblGrid>
       <w:tr>
-        <w:trPr><w:trHeight w:val="3000" w:hRule="atLeast"/></w:trPr>
+        <w:trPr><w:trHeight w:val="380" w:hRule="atLeast"/></w:trPr>
         <w:tc>
           <w:tcPr>
             <w:tcW w:w="7900" w:type="dxa"/>
-            <w:shd w:val="clear" w:color="auto" w:fill="A3C992"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="276749"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          ${makeParagraph('★保護者の皆様へ★', { align: 'center', sizeHalfPt: 20, bold: true, color: 'FFFFFF', spaceAfter: 0, line: 220 })}
+        </w:tc>
+      </w:tr>
+      <w:tr>
+        <w:trPr><w:trHeight w:val="2620" w:hRule="atLeast"/></w:trPr>
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="7900" w:type="dxa"/>
+            <w:shd w:val="clear" w:color="auto" w:fill="F6FBF8"/>
+            <w:tcMar>
+              <w:top w:w="100" w:type="dxa"/><w:left w:w="150" w:type="dxa"/>
+              <w:bottom w:w="90" w:type="dxa"/><w:right w:w="150" w:type="dxa"/>
+            </w:tcMar>
             <w:vAlign w:val="top"/>
           </w:tcPr>
-          ${makeParagraph('★保護者の皆様へ★', { align: 'center', sizeHalfPt: 24, bold: true, spaceAfter: 70, line: 230 })}
-          ${makeMultilineParagraphs(data.parentsNote || '', { align: 'left', sizeHalfPt: parentsSizeHalfPt, spaceAfter: 35, line: 250 })}
+          ${makeMultilineParagraphs(data.parentsNote || '', { align: 'left', sizeHalfPt: parentsSizeHalfPt, color: '1A202C', spaceAfter: 35, line: 250 })}
         </w:tc>
       </w:tr>
     </w:tbl>`;
 
     // ---------- 右カラム：③ 来週の予定表 ----------
     // 列幅合計: 380 + 820 + 440*6 + 360*3 + 2980 = 7900
-    // （1〜6限の列を広げて2文字の教科名に余裕を持たせ、その分を備考列から削る）
     const colWidths = [380, 820, 440, 440, 440, 440, 440, 440, 360, 360, 360, 2980];
     const colHeaders = ['月', '日', '1', '2', '3', '4', '5', '6', '給', '清', '部', '備考'];
 
     const scheduleGridXml = colWidths.map((w) => `<w:gridCol w:w="${w}"/>`).join('');
 
+    const apronStr = data.apronText !== undefined
+      ? data.apronText
+      : ((data.apronGroups || []).slice().sort((a, b) => a - b).join('・'));
+    let leftBannerStr = data.scheduleWeekRangeText
+      ? `来週の予定（${data.scheduleWeekRangeText}）`
+      : (data.scheduleBannerText || '');
+    if (!data.scheduleWeekRangeText && apronStr) {
+      leftBannerStr = leftBannerStr.replace(/\s*要エプロン持参.*$/, '');
+    }
+
+    const bannerParagraphXml = `<w:p>
+      <w:pPr>
+        <w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        ${rPr({ sizeHalfPt: 17, bold: true, color: 'FFFFFF' })}
+        <w:t xml:space="preserve">${xmlEsc(leftBannerStr)}</w:t>
+      </w:r>
+      ${apronStr ? `<w:r>${rPr({ sizeHalfPt: 16, bold: true, color: 'FFFFFF' })}<w:t xml:space="preserve">　 </w:t></w:r><w:r>${rPr({ sizeHalfPt: 16, bold: true, color: '78350F', fill: 'FEF3C7' })}<w:t xml:space="preserve"> 要エプロン持参 ${xmlEsc(apronStr)}班 </w:t></w:r>` : ''}
+    </w:p>`;
+
     const bannerRowXml = `<w:tr>
-      <w:trPr><w:trHeight w:val="340" w:hRule="atLeast"/></w:trPr>
+      <w:trPr><w:trHeight w:val="360" w:hRule="atLeast"/></w:trPr>
       <w:tc>
-        <w:tcPr><w:tcW w:w="7900" w:type="dxa"/><w:gridSpan w:val="12"/><w:vAlign w:val="center"/></w:tcPr>
-        ${makeParagraph(data.scheduleBannerText || '', { align: 'left', sizeHalfPt: 17, bold: true, spaceAfter: 0, line: 240 })}
+        <w:tcPr>
+          <w:tcW w:w="7900" w:type="dxa"/>
+          <w:gridSpan w:val="12"/>
+          <w:tcBorders>
+            <w:top w:val="single" w:sz="14" w:space="0" w:color="1E3A5F"/>
+            <w:left w:val="single" w:sz="14" w:space="0" w:color="1E3A5F"/>
+            <w:bottom w:val="single" w:sz="10" w:space="0" w:color="1E3A5F"/>
+            <w:right w:val="single" w:sz="14" w:space="0" w:color="1E3A5F"/>
+          </w:tcBorders>
+          <w:shd w:val="clear" w:color="auto" w:fill="1E3A5F"/>
+          <w:vAlign w:val="center"/>
+        </w:tcPr>
+        ${bannerParagraphXml}
       </w:tc>
     </w:tr>`;
 
+    const majorRightCols = new Set([1, 7, 10]); // 日(1)・6限(7)・部(10)の右罫線を太めに
     const headerRowXml = `<w:tr>
       <w:trPr><w:trHeight w:val="320" w:hRule="atLeast"/></w:trPr>
       ${colHeaders.map((h, i) => `<w:tc>
-        <w:tcPr><w:tcW w:w="${colWidths[i]}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>
-        ${makeParagraph(h, { align: 'center', sizeHalfPt: 17, bold: true, spaceAfter: 0, line: 240 })}
+        <w:tcPr>
+          <w:tcW w:w="${colWidths[i]}" w:type="dxa"/>
+          <w:tcBorders>
+            <w:top w:val="single" w:sz="10" w:space="0" w:color="1E3A5F"/>
+            <w:left w:val="single" w:sz="6" w:space="0" w:color="7C8BA1"/>
+            <w:bottom w:val="single" w:sz="10" w:space="0" w:color="1E3A5F"/>
+            <w:right w:val="single" w:sz="${majorRightCols.has(i) ? 10 : 6}" w:space="0" w:color="${majorRightCols.has(i) ? '334155' : '7C8BA1'}"/>
+          </w:tcBorders>
+          <w:shd w:val="clear" w:color="auto" w:fill="E8EEF6"/>
+          <w:vAlign w:val="center"/>
+        </w:tcPr>
+        ${makeParagraph(h, { align: 'center', sizeHalfPt: 17, bold: true, color: '1E3A5F', spaceAfter: 0, line: 230 })}
       </w:tc>`).join('')}
     </w:tr>`;
 
     const weekDates = data.weekDates || [];
     const monthSpans = data.monthSpans || [5, 0, 0, 0, 0];
+
+    const majorRightBorderXml = `<w:tcBorders><w:right w:val="single" w:sz="10" w:space="0" w:color="334155"/></w:tcBorders>`;
 
     const dayRowsXml = (data.scheduleRows || data.schedule || []).map((row, idx) => {
       const span = monthSpans[idx];
@@ -539,30 +675,78 @@ window.HomeDocxBuilder = (() => {
       const monthText = span > 0 ? (weekDates[idx]?.month || '') : '';
 
       const monthCell = `<w:tc>
-        <w:tcPr><w:tcW w:w="${colWidths[0]}" w:type="dxa"/>${monthMergeXml}<w:vAlign w:val="center"/></w:tcPr>
-        ${makeParagraph(monthText, { align: 'center', sizeHalfPt: 17, bold: true, spaceAfter: 0, line: 240 })}
+        <w:tcPr>
+          <w:tcW w:w="${colWidths[0]}" w:type="dxa"/>
+          ${monthMergeXml}
+          <w:shd w:val="clear" w:color="auto" w:fill="EEF3F9"/>
+          <w:vAlign w:val="center"/>
+        </w:tcPr>
+        ${makeParagraph(monthText, { align: 'center', sizeHalfPt: 17, bold: true, color: '1E3A5F', spaceAfter: 0, line: 230 })}
       </w:tc>`;
 
       const dayCell = `<w:tc>
-        <w:tcPr><w:tcW w:w="${colWidths[1]}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>
-        ${makeParagraph(weekDates[idx]?.dayLabel || '', { align: 'center', sizeHalfPt: 16, spaceAfter: 0, line: 240 })}
+        <w:tcPr>
+          <w:tcW w:w="${colWidths[1]}" w:type="dxa"/>
+          ${majorRightBorderXml}
+          <w:shd w:val="clear" w:color="auto" w:fill="F6F8FB"/>
+          <w:vAlign w:val="center"/>
+        </w:tcPr>
+        ${makeParagraph(weekDates[idx]?.dayLabel || '', { align: 'center', sizeHalfPt: 16, bold: true, color: '1E293B', spaceAfter: 0, line: 230 })}
       </w:tc>`;
 
+      const makeFlagCells = () => ['lunch', 'clean', 'club'].map((key, fIdx) => {
+        const val = row[key] || '';
+        const isOff = val === '×';
+        return `<w:tc>
+          <w:tcPr>
+            <w:tcW w:w="${colWidths[8 + fIdx]}" w:type="dxa"/>
+            ${fIdx === 2 ? majorRightBorderXml : ''}
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          ${makeParagraph(val, { align: 'center', sizeHalfPt: 17, bold: true, color: isOff ? '991B1B' : '1E293B', spaceAfter: 0, line: 230 })}
+        </w:tc>`;
+      }).join('');
+
       const noteText = row.noteText !== undefined ? row.noteText : (row.note || '');
-      if (row.kind && row.kind !== 'normal') {
+      const noteCell = `<w:tc>
+        <w:tcPr><w:tcW w:w="${colWidths[11]}" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>
+        ${makeMultilineParagraphs(noteText, { align: 'left', sizeHalfPt: 15, color: '1E293B', spaceAfter: 0, line: 230 })}
+      </w:tc>`;
+
+      if (row.kind === 'holiday') {
         const spanWidth = colWidths.slice(2, 11).reduce((a, b) => a + Number(b), 0);
         const spanCell = `<w:tc>
-        <w:tcPr><w:tcW w:w="${spanWidth}" w:type="dxa"/><w:gridSpan w:val="9"/><w:vAlign w:val="center"/></w:tcPr>
-        ${makeParagraph(row.spanText || '', { align: 'center', sizeHalfPt: 16, bold: true, spaceAfter: 0, line: 240 })}
-      </w:tc>`;
-        const spanNoteCell = `<w:tc>
-        <w:tcPr><w:tcW w:w="${colWidths[11]}" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>
-        ${makeMultilineParagraphs(noteText, { align: 'left', sizeHalfPt: 15, spaceAfter: 0, line: 240 })}
-      </w:tc>`;
+          <w:tcPr>
+            <w:tcW w:w="${spanWidth}" w:type="dxa"/>
+            <w:gridSpan w:val="9"/>
+            ${majorRightBorderXml}
+            <w:shd w:val="clear" w:color="auto" w:fill="FEF2F2"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          ${makeParagraph(row.spanText || '休み', { align: 'center', sizeHalfPt: 17, bold: true, color: '991B1B', spaceAfter: 0, line: 230 })}
+        </w:tc>`;
         return `<w:tr>
-        <w:trPr><w:trHeight w:val="640" w:hRule="atLeast"/></w:trPr>
-        ${monthCell}${dayCell}${spanCell}${spanNoteCell}
-      </w:tr>`;
+          <w:trPr><w:trHeight w:val="640" w:hRule="atLeast"/></w:trPr>
+          ${monthCell}${dayCell}${spanCell}${noteCell}
+        </w:tr>`;
+      }
+
+      if (row.kind === 'event') {
+        const spanWidth = colWidths.slice(2, 8).reduce((a, b) => a + Number(b), 0);
+        const spanCell = `<w:tc>
+          <w:tcPr>
+            <w:tcW w:w="${spanWidth}" w:type="dxa"/>
+            <w:gridSpan w:val="6"/>
+            ${majorRightBorderXml}
+            <w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          ${makeParagraph(row.spanText || '行事', { align: 'center', sizeHalfPt: 17, bold: true, color: '1E3A5F', spaceAfter: 0, line: 230 })}
+        </w:tc>`;
+        return `<w:tr>
+          <w:trPr><w:trHeight w:val="640" w:hRule="atLeast"/></w:trPr>
+          ${monthCell}${dayCell}${spanCell}${makeFlagCells()}${noteCell}
+        </w:tr>`;
       }
 
       const periodCells = row.periods.map((subj, pIdx) => {
@@ -571,27 +755,21 @@ window.HomeDocxBuilder = (() => {
           `${lIdx > 0 ? '<w:br/>' : ''}<w:t xml:space="preserve">${xmlEsc(ln)}</w:t>`
         ).join('');
         return `<w:tc>
-          <w:tcPr><w:tcW w:w="${colWidths[2 + pIdx]}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>
+          <w:tcPr>
+            <w:tcW w:w="${colWidths[2 + pIdx]}" w:type="dxa"/>
+            ${pIdx === 5 ? majorRightBorderXml : ''}
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
           <w:p>
-            <w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>
-            <w:r>${rPr({ sizeHalfPt: 15 })}${runs}</w:r>
+            <w:pPr><w:spacing w:before="0" w:after="0" w:line="230" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>
+            <w:r>${rPr({ sizeHalfPt: 15, color: '1E293B' })}${runs}</w:r>
           </w:p>
         </w:tc>`;
       }).join('');
 
-      const flagCells = ['lunch', 'clean', 'club'].map((key, fIdx) => `<w:tc>
-        <w:tcPr><w:tcW w:w="${colWidths[8 + fIdx]}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>
-        ${makeParagraph(row[key] || '', { align: 'center', sizeHalfPt: 17, spaceAfter: 0, line: 240 })}
-      </w:tc>`).join('');
-
-      const noteCell = `<w:tc>
-        <w:tcPr><w:tcW w:w="${colWidths[11]}" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>
-        ${makeMultilineParagraphs(noteText, { align: 'left', sizeHalfPt: 15, spaceAfter: 0, line: 240 })}
-      </w:tc>`;
-
       return `<w:tr>
         <w:trPr><w:trHeight w:val="640" w:hRule="atLeast"/></w:trPr>
-        ${monthCell}${dayCell}${periodCells}${flagCells}${noteCell}
+        ${monthCell}${dayCell}${periodCells}${makeFlagCells()}${noteCell}
       </w:tr>`;
     }).join('');
 
@@ -600,17 +778,17 @@ window.HomeDocxBuilder = (() => {
         <w:tblW w:w="7900" w:type="dxa"/>
         <w:jc w:val="center"/>
         <w:tblBorders>
-          <w:top w:val="single" w:sz="16" w:space="0" w:color="111111"/>
-          <w:left w:val="single" w:sz="16" w:space="0" w:color="111111"/>
-          <w:bottom w:val="single" w:sz="16" w:space="0" w:color="111111"/>
-          <w:right w:val="single" w:sz="16" w:space="0" w:color="111111"/>
-          <w:insideH w:val="single" w:sz="6" w:space="0" w:color="222222"/>
-          <w:insideV w:val="single" w:sz="6" w:space="0" w:color="222222"/>
+          <w:top w:val="single" w:sz="14" w:space="0" w:color="1E3A5F"/>
+          <w:left w:val="single" w:sz="14" w:space="0" w:color="1E3A5F"/>
+          <w:bottom w:val="single" w:sz="14" w:space="0" w:color="1E3A5F"/>
+          <w:right w:val="single" w:sz="14" w:space="0" w:color="1E3A5F"/>
+          <w:insideH w:val="single" w:sz="6" w:space="0" w:color="7C8BA1"/>
+          <w:insideV w:val="single" w:sz="6" w:space="0" w:color="7C8BA1"/>
         </w:tblBorders>
         <w:tblLayout w:type="fixed"/>
         <w:tblCellMar>
-          <w:top w:w="36" w:type="dxa"/><w:left w:w="32" w:type="dxa"/>
-          <w:bottom w:w="36" w:type="dxa"/><w:right w:w="32" w:type="dxa"/>
+          <w:top w:w="34" w:type="dxa"/><w:left w:w="32" w:type="dxa"/>
+          <w:bottom w:w="34" w:type="dxa"/><w:right w:w="32" w:type="dxa"/>
         </w:tblCellMar>
       </w:tblPr>
       <w:tblGrid>${scheduleGridXml}</w:tblGrid>
@@ -633,16 +811,16 @@ window.HomeDocxBuilder = (() => {
         <w:tblW w:w="16158" w:type="dxa"/>
         <w:jc w:val="center"/>
         <w:tblBorders>
-          <w:top w:val="single" w:sz="12" w:space="0" w:color="222222"/>
-          <w:left w:val="single" w:sz="12" w:space="0" w:color="222222"/>
-          <w:bottom w:val="single" w:sz="12" w:space="0" w:color="222222"/>
-          <w:right w:val="single" w:sz="12" w:space="0" w:color="222222"/>
+          <w:top w:val="single" w:sz="28" w:space="0" w:color="1E3A5F"/>
+          <w:left w:val="single" w:sz="12" w:space="0" w:color="1E3A5F"/>
+          <w:bottom w:val="single" w:sz="12" w:space="0" w:color="1E3A5F"/>
+          <w:right w:val="single" w:sz="12" w:space="0" w:color="1E3A5F"/>
           <w:insideH w:val="none"/>
-          <w:insideV w:val="single" w:sz="12" w:space="0" w:color="222222"/>
+          <w:insideV w:val="single" w:sz="8" w:space="0" w:color="64748B"/>
         </w:tblBorders>
         <w:tblLayout w:type="fixed"/>
         <w:tblCellMar>
-          <w:top w:w="100" w:type="dxa"/><w:left w:w="120" w:type="dxa"/>
+          <w:top w:w="110" w:type="dxa"/><w:left w:w="120" w:type="dxa"/>
           <w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/>
         </w:tblCellMar>
       </w:tblPr>
