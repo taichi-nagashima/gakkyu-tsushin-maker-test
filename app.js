@@ -8,7 +8,7 @@
   // ---------- Constants ----------
   // キャッシュ対策バージョン：index.html の <meta name="asset-version"> と各 ?v= と必ず同じ値にする
   // （更新時は index.html と app.js の現在の値をまとめて置換。ずれているとコンソールに警告が出ます）
-  const APP_VERSION = '2026112602';
+  const APP_VERSION = '2026112603';
   const KEYS = {
     state: 'home_newsletter_state_v1',
     base: 'home_newsletter_default_schedule_v1',
@@ -261,6 +261,32 @@
   }
   function rowFromBase(b) {
     return { type: 'normal', eventText: '', autoHoliday: false, ...normalizeBaseRow(b) };
+  }
+  function isBaseRegistered() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEYS.base) || 'null');
+      return Array.isArray(saved) && saved.length === 5;
+    } catch (err) { return false; }
+  }
+  function renderBaseView() {
+    const table = $('baseViewTable');
+    const note = $('baseViewNote');
+    if (!table || !note) return;
+    const rows = getBase();
+    const days = ['月', '火', '水', '木', '金'];
+    const showExtra = rows.some((r) => r.endTime || r.note);
+    let html = '<thead><tr><th></th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>給</th><th>清</th><th>部</th>' + (showExtra ? '<th>帰学・備考</th>' : '') + '</tr></thead><tbody>';
+    rows.forEach((r, i) => {
+      html += '<tr><th>' + days[i] + '</th>'
+        + r.periods.map((p) => '<td>' + escapeHtml(p || '') + '</td>').join('')
+        + '<td>' + escapeHtml(r.lunch || '') + '</td><td>' + escapeHtml(r.clean || '') + '</td><td>' + escapeHtml(r.club || '') + '</td>'
+        + (showExtra ? '<td class="base-view-extra">' + escapeHtml([r.endTime, r.note].filter(Boolean).join('　')) + '</td>' : '')
+        + '</tr>';
+    });
+    table.innerHTML = html + '</tbody>';
+    note.textContent = isBaseRegistered()
+      ? 'いま登録されている「いつもの時間割」です。'
+      : 'まだ登録がありません。表示は初期設定の時間割です。';
   }
   function normalizeRow(r) {
     return {
@@ -1466,7 +1492,17 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
       });
       onEl('btnSaveBase', 'click', () => {
         const base = state.schedule.map((r) => ({ periods: r.periods.slice(), lunch: r.lunch, clean: r.clean, club: r.club, endTime: r.endTime, note: r.note }));
-        try { localStorage.setItem(KEYS.base, JSON.stringify(base)); showToast('「いつもの時間割」に登録しました。次の号から自動で使われます'); } catch (err) { console.error('[HOME学級通信] btnSaveBase でエラー:', err); showToast('「いつもの時間割」の保存に失敗しました', { error: true }); }
+        try { localStorage.setItem(KEYS.base, JSON.stringify(base)); renderBaseView(); showToast('「いつもの時間割」に登録しました。次の号から自動で使われます'); } catch (err) { console.error('[HOME学級通信] btnSaveBase でエラー:', err); showToast('「いつもの時間割」の保存に失敗しました', { error: true }); }
+      });
+      onEl('btnToggleBaseView', 'click', () => {
+        const panel = $('baseView');
+        const btn = $('btnToggleBaseView');
+        if (!panel || !btn) return;
+        const open = panel.hidden;
+        if (open) renderBaseView();
+        panel.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+        btn.textContent = open ? '登録中の「いつもの時間割」を閉じる' : '登録中の「いつもの時間割」を見る';
       });
       onEl('btnResetBase', 'click', () => {
         const before = clone(state.schedule);
