@@ -33,11 +33,11 @@
 
   // 原本PDF（3年3組）の時間割
   const BUILTIN_BASE = [
-    { periods: ['学活', '保体', '数学', '社臼', '国語', '理永'], lunch: '〇', clean: '〇', club: '〇', endTime: '', note: '' },
-    { periods: ['理鈴', '数学', '英語', '理永', '社臼', '国語'], lunch: '〇', clean: '×', club: '〇', endTime: '', note: '' },
+    { periods: ['学活', '保体', '数学', '社会', '国語', '理科'], lunch: '〇', clean: '〇', club: '〇', endTime: '', note: '' },
+    { periods: ['理科', '数学', '英語', '理科', '社会', '国語'], lunch: '〇', clean: '×', club: '〇', endTime: '', note: '' },
     { periods: ['国語', '保体', '英語', '数学', '道徳', '×'], lunch: '〇', clean: '〇', club: '〇', endTime: '', note: '' },
-    { periods: ['総合', '音楽', '社臼', '英語', '保体', '美術'], lunch: '〇', clean: '×', club: '〇', endTime: '', note: '' },
-    { periods: ['理鈴', '数学', '技家', '社窪', '英語', '総合'], lunch: '〇', clean: '〇', club: '〇', endTime: '', note: '' }
+    { periods: ['総合', '音楽', '社会', '英語', '保体', '美術'], lunch: '〇', clean: '×', club: '〇', endTime: '', note: '' },
+    { periods: ['理科', '数学', '技家', '社会', '英語', '総合'], lunch: '〇', clean: '〇', club: '〇', endTime: '', note: '' }
   ];
 
   const PARENT_TEMPLATES = {
@@ -56,7 +56,7 @@
     try {
       fn();
     } catch (err) {
-      console.error(`[HOME学級通信] ${label} でエラー:`, err);
+      console.error(`[HOME学級通信] ${label} でエラー:`, err); if (typeof showToast === 'function') showToast(`${label} でエラーが発生しました`, { error: true });
     }
   }
   function onEl(target, event, handler) {
@@ -256,7 +256,7 @@
     try {
       const saved = JSON.parse(localStorage.getItem(KEYS.base) || 'null');
       if (Array.isArray(saved) && saved.length === 5) return saved.map(normalizeBaseRow);
-    } catch (_) { /* ignore */ }
+    } catch (err) { console.warn('[HOME学級通信] getBase でエラー:', err); }
     return clone(BUILTIN_BASE);
   }
   function rowFromBase(b) {
@@ -275,9 +275,9 @@
     const fri = fridayOfWeek(new Date());
     return {
       logoText: 'HOME',
-      schoolName: '川崎市立野川中学校',
-      className: '3年3組 学級通信',
-      publisherName: '永嶋　裕太',
+      schoolName: '○○市立○○中学校',
+      className: '○年○組 学級通信',
+      publisherName: '担任',
       issueNumber: 1,
       issueDate: toISO(fri),
       articleTitle: '',
@@ -446,10 +446,7 @@
     if (mode === 'auto') {
       size = cfg.base;
       el.style.fontSize = `${size}px`;
-      while (overflowPx() > 1 && size > cfg.min) {
-        size = Math.round((size - 0.5) * 10) / 10;
-        el.style.fontSize = `${size}px`;
-      }
+      if (overflowPx() > 1) { let lo = cfg.min, hi = cfg.base, best = cfg.min; while (lo <= hi) { const mid = Math.floor(((lo + hi) / 2) * 2) / 2; el.style.fontSize = `${mid}px`; if (overflowPx() <= 1) { best = mid; lo = mid + 0.5; } else { hi = mid - 0.5; } } size = best; el.style.fontSize = `${size}px`;
     } else {
       size = cfg[mode];
       el.style.fontSize = `${size}px`;
@@ -1013,9 +1010,9 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
     let lastErr = null;
     for (const model of models) {
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { temperature: 0.75, responseMimeType: 'application/json' }
@@ -1115,7 +1112,7 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
   function dismissCloudNudge() {
     try {
       localStorage.setItem(KEYS.cloudNudgeDismissed, '1');
-    } catch (_) { /* ignore */ }
+    } catch (err) { console.warn('[HOME学級通信] dismissCloudNudge でエラー:', err); }
     closeModal(els.cloudNudgeModal);
   }
   function maybeShowCloudNudge() {
@@ -1284,15 +1281,15 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
 
   function renderHistory() {
     const list = loadHistory();
-    els.historyList.innerHTML = '';
+    els.historyList.textContent = '';
     if (!list.length) {
-      els.historyList.innerHTML = '<p class="muted small">まだ保存した号はありません。書き出すと自動でここに保存されます。</p>';
+      const p = document.createElement('p'); p.className = 'muted small'; p.textContent = 'まだ保存した号はありません。書き出すと自動でここに保存されます。'; els.historyList.appendChild(p);
       return;
     }
     list.forEach((h, i) => {
       const row = document.createElement('div');
       row.className = `history-row ${h.issueNumber === state.issueNumber ? 'is-current' : ''}`;
-      row.innerHTML = `<div class="history-info"><b>第${h.issueNumber}号　${escapeHtml(h.articleTitle || '（タイトルなし）')}</b><span>${escapeHtml(eraDate(h.issueDate))}・保存 ${escapeHtml(h.savedAt || '')}</span></div><div class="history-btns"></div>`;
+      const info = document.createElement('div'); info.className = 'history-info'; const b = document.createElement('b'); b.textContent = `第${h.issueNumber}号 ${h.articleTitle || '（タイトルなし）'}`; const span = document.createElement('span'); span.textContent = `${eraDate(h.issueDate)}・保存 ${h.savedAt || ''}`; info.appendChild(b); info.appendChild(span); const btnsDiv = document.createElement('div'); btnsDiv.className = 'history-btns'; row.appendChild(info); row.appendChild(btnsDiv);
       const btns = row.querySelector('.history-btns');
       const open = document.createElement('button');
       open.type = 'button';
@@ -1449,8 +1446,7 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
       });
       onEl('btnSaveBase', 'click', () => {
         const base = state.schedule.map((r) => ({ periods: r.periods.slice(), lunch: r.lunch, clean: r.clean, club: r.club, endTime: r.endTime, note: r.note }));
-        localStorage.setItem(KEYS.base, JSON.stringify(base));
-        showToast('「いつもの時間割」に登録しました。次の号から自動で使われます');
+        try { localStorage.setItem(KEYS.base, JSON.stringify(base)); showToast('「いつもの時間割」に登録しました。次の号から自動で使われます'); } catch (err) { console.error('[HOME学級通信] btnSaveBase でエラー:', err); showToast('「いつもの時間割」の保存に失敗しました', { error: true }); }
       });
       onEl('btnResetBase', 'click', () => {
         const before = clone(state.schedule);
@@ -1853,7 +1849,7 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
       };
       const rowEl = document.createElement('div');
       rowEl.className = 'history-row';
-      rowEl.innerHTML = `<div class="history-info"><b>第${item.issueNumber}号　${escapeHtml(item.articleTitle || '（タイトルなし）')}</b><span>${escapeHtml(eraDate(item.issueDate))}・保存 ${escapeHtml(item.savedAt || '')}</span></div><div class="history-btns"></div>`;
+      const info = document.createElement('div'); info.className = 'history-info'; const b = document.createElement('b'); b.textContent = `第${item.issueNumber}号 ${item.articleTitle || '（タイトルなし）'}`; const span = document.createElement('span'); span.textContent = `${eraDate(item.issueDate)}・保存 ${item.savedAt || ''}`; info.appendChild(b); info.appendChild(span); const btnsDiv = document.createElement('div'); btnsDiv.className = 'history-btns'; rowEl.appendChild(info); rowEl.appendChild(btnsDiv);
       const btns = rowEl.querySelector('.history-btns');
       const open = document.createElement('button');
       open.type = 'button';
