@@ -8,7 +8,7 @@
   // ---------- Constants ----------
   // キャッシュ対策バージョン：index.html の <meta name="asset-version"> と各 ?v= と必ず同じ値にする
   // （更新時は index.html と app.js の現在の値をまとめて置換。ずれているとコンソールに警告が出ます）
-  const APP_VERSION = '2026112501';
+  const APP_VERSION = '2026112601';
   const KEYS = {
     state: 'home_newsletter_state_v1',
     base: 'home_newsletter_default_schedule_v1',
@@ -446,7 +446,7 @@
     if (mode === 'auto') {
       size = cfg.base;
       el.style.fontSize = `${size}px`;
-      if (overflowPx() > 1) { let lo = cfg.min, hi = cfg.base, best = cfg.min; while (lo <= hi) { const mid = Math.floor(((lo + hi) / 2) * 2) / 2; el.style.fontSize = `${mid}px`; if (overflowPx() <= 1) { best = mid; lo = mid + 0.5; } else { hi = mid - 0.5; } } size = best; el.style.fontSize = `${size}px`;
+      if (overflowPx() > 1) { let lo = cfg.min, hi = cfg.base, best = cfg.min; while (lo <= hi) { const mid = Math.floor(((lo + hi) / 2) * 2) / 2; el.style.fontSize = `${mid}px`; if (overflowPx() <= 1) { best = mid; lo = mid + 0.5; } else { hi = mid - 0.5; } } size = best; el.style.fontSize = `${size}px`; }
     } else {
       size = cfg[mode];
       el.style.fontSize = `${size}px`;
