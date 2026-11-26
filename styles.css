@@ -727,9 +727,163 @@ input:focus, textarea:focus, select:focus {
     padding: 4px 7px;
   }
 }
-.sch-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+/* ---------- Base schedule box ---------- */
+.base-box {
+  container-type: inline-size;
+  margin-top: 10px;
+  padding: 10px 11px;
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.base-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.base-box-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.base-box-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+}
+.base-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.base-status.is-saved {
+  background: var(--ok-soft);
+  color: var(--ok);
+  border: 1px solid #bbf7d0;
+}
+.base-status.is-unset {
+  background: #eef1f6;
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
+}
+.base-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.base-toggle-btn::after {
+  content: "▾";
+  font-size: 11px;
+  line-height: 1;
+}
+.base-toggle-btn:hover {
+  background: var(--primary-soft);
+  border-color: #cfe0fc;
+}
+.base-toggle-btn[aria-expanded="true"] {
+  background: var(--primary-soft);
+  border-color: #bcd2fb;
+  color: var(--primary-hover);
+}
+.base-toggle-btn[aria-expanded="true"]::after {
+  content: "▴";
+}
+.base-box-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.base-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+  min-width: 0;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+}
+.base-btn:active {
+  transform: translateY(1px);
+}
+.base-btn-main {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.base-btn-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.base-btn-sub {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.base-btn-save {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.22);
+}
+.base-btn-save .base-btn-sub {
+  color: rgba(255, 255, 255, 0.88);
+}
+.base-btn-save:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+.base-btn-reset {
+  background: #fff;
+  border: 1px solid #ecc6c6;
+  color: #b91c1c;
+}
+.base-btn-reset .base-btn-sub {
+  color: #8b3a3a;
+}
+.base-btn-reset:hover {
+  background: var(--danger-soft);
+  border-color: #e08b8b;
+}
+@container (max-width: 310px) {
+  .base-box-actions {
+    grid-template-columns: 1fr;
+  }
+}
 
-.base-view { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface); }
+.base-view { margin-top: 9px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; background: var(--surface); }
 .base-view[hidden] { display: none; }
 .base-view-note { font-weight: 600; font-size: 12.5px; margin: 0 0 8px; }
 .base-view-scroll { overflow-x: auto; }
@@ -738,6 +892,7 @@ input:focus, textarea:focus, select:focus {
 .base-view-table thead th { background: var(--primary-soft); font-weight: 600; }
 .base-view-table tbody th { background: var(--primary-soft); font-weight: 600; }
 .base-view-table .base-view-extra { text-align: left; white-space: normal; }
+.base-view-help { margin: 8px 0 0; }
 
 .editor-end {
   text-align: center;

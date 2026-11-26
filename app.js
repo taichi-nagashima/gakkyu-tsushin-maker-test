@@ -8,7 +8,7 @@
   // ---------- Constants ----------
   // キャッシュ対策バージョン：index.html の <meta name="asset-version"> と各 ?v= と必ず同じ値にする
   // （更新時は index.html と app.js の現在の値をまとめて置換。ずれているとコンソールに警告が出ます）
-  const APP_VERSION = '2026112603';
+  const APP_VERSION = '2026112604';
   const KEYS = {
     state: 'home_newsletter_state_v1',
     base: 'home_newsletter_default_schedule_v1',
@@ -268,7 +268,18 @@
       return Array.isArray(saved) && saved.length === 5;
     } catch (err) { return false; }
   }
+  function updateBaseStatus() {
+    const badge = $('baseStatusBadge');
+    if (!badge) return;
+    const registered = isBaseRegistered();
+    badge.textContent = registered ? '✓ 登録済み' : '未登録（初期値）';
+    badge.className = `base-status ${registered ? 'is-saved' : 'is-unset'}`;
+    badge.title = registered
+      ? 'このブラウザに「いつもの時間割」が登録されています'
+      : 'まだ登録されていません（現在は初期設定の時間割が使われます）';
+  }
   function renderBaseView() {
+    updateBaseStatus();
     const table = $('baseViewTable');
     const note = $('baseViewNote');
     if (!table || !note) return;
@@ -687,6 +698,8 @@
     renderPhotoEditor();
     renderApronChips();
     renderScheduleEditor();
+    updateBaseStatus();
+    if ($('baseView') && !$('baseView').hidden) renderBaseView();
     updateAiMode();
   }
 
@@ -1502,7 +1515,7 @@ ${ai.parentsMemo.trim() || '（特になし：日頃の感謝と体調管理の�
         if (open) renderBaseView();
         panel.hidden = !open;
         btn.setAttribute('aria-expanded', String(open));
-        btn.textContent = open ? '登録中の「いつもの時間割」を閉じる' : '登録中の「いつもの時間割」を見る';
+        btn.textContent = open ? '内容を閉じる' : '内容を見る';
       });
       onEl('btnResetBase', 'click', () => {
         const before = clone(state.schedule);

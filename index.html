@@ -10,14 +10,14 @@
          meta・4つの ?v=・app.js の APP_VERSION をまとめて更新できます
        ※ 同じ日に複数回更新するときは「日付＋連番」（例: 2026112501）にしてください
        ========================================================= -->
-  <meta name="asset-version" content="2026112603" />
-  <link rel="stylesheet" href="styles.css?v=2026112603" />
-  <script defer src="layout-config.js?v=2026112603"></script>
-  <script defer src="photo-store.js?v=2026112603"></script>
-  <script defer src="holidays.js?v=2026112603"></script>
-  <script defer src="docx-builder.js?v=2026112603"></script>
-  <script defer src="png-exporter.js?v=2026112603"></script>
-  <script defer src="app.js?v=2026112603"></script>
+  <meta name="asset-version" content="2026112604" />
+  <link rel="stylesheet" href="styles.css?v=2026112604" />
+  <script defer src="layout-config.js?v=2026112604"></script>
+  <script defer src="photo-store.js?v=2026112604"></script>
+  <script defer src="holidays.js?v=2026112604"></script>
+  <script defer src="docx-builder.js?v=2026112604"></script>
+  <script defer src="png-exporter.js?v=2026112604"></script>
+  <script defer src="app.js?v=2026112604"></script>
 </head>
 <body>
   <!-- ===== トップバー ===== -->
@@ -261,17 +261,44 @@
           <p class="muted small">
             給・清・部はクリックで「〇 → × → △ → －」。種類を「行事」「休み」にすると1〜6限が1つの欄になります。祝日は自動で「休み」になります。
           </p>
-          <div class="sch-actions">
-            <button type="button" class="link" id="btnSaveBase">この時間割を「いつもの時間割」に登録</button>
-            <button type="button" class="link" id="btnResetBase">いつもの時間割に戻す</button>
-            <button type="button" class="link" id="btnToggleBaseView" aria-expanded="false">登録中の「いつもの時間割」を見る</button>
-          </div>
-          <div class="base-view" id="baseView" hidden>
-            <p class="base-view-note" id="baseViewNote"></p>
-            <div class="base-view-scroll">
-              <table class="base-view-table" id="baseViewTable"></table>
+          <div class="base-box">
+            <div class="base-box-head">
+              <div class="base-box-title-group">
+                <span class="base-box-title">いつもの時間割</span>
+                <span class="base-status is-unset" id="baseStatusBadge">未登録（初期値）</span>
+              </div>
+              <button type="button" class="base-toggle-btn" id="btnToggleBaseView" aria-expanded="false" aria-controls="baseView">内容を見る</button>
             </div>
-            <p class="muted small">新しい号の時間割は、この内容から始まります。変えたいときは、上のエディタで時間割を直してから「この時間割を『いつもの時間割』に登録」を押してください。</p>
+            <div class="base-box-actions">
+              <button type="button" class="base-btn base-btn-save" id="btnSaveBase">
+                <span class="base-btn-main">
+                  <svg class="base-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M13 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h8l3 3v8a1 1 0 0 1-1 1Z" />
+                    <path d="M5 2v4h5V2" />
+                    <path d="M5 14V9h6v5" />
+                  </svg>
+                  <span>この時間割を登録</span>
+                </span>
+                <span class="base-btn-sub">毎週の土台として保存</span>
+              </button>
+              <button type="button" class="base-btn base-btn-reset" id="btnResetBase">
+                <span class="base-btn-main">
+                  <svg class="base-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2.5 3.5v4h4" />
+                    <path d="M3 7.5a5.5 5.5 0 1 1 1.2 4" />
+                  </svg>
+                  <span>いつもの時間割に戻す</span>
+                </span>
+                <span class="base-btn-sub">今の入力を消して上書き</span>
+              </button>
+            </div>
+            <div class="base-view" id="baseView" hidden>
+              <p class="base-view-note" id="baseViewNote"></p>
+              <div class="base-view-scroll">
+                <table class="base-view-table" id="baseViewTable"></table>
+              </div>
+              <p class="muted small base-view-help">新しい号の時間割は、この内容から始まります。変えたいときは、上のエディタで時間割を直してから「この時間割を登録」を押してください。</p>
+            </div>
           </div>
         </section>
 
