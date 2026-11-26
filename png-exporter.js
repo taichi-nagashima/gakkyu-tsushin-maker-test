@@ -5,10 +5,10 @@
 
 window.HomePngExporter = (() => {
   'use strict';
-
-  const SHEET_W = 1122;
-  const SHEET_H = 794;
-  const SCALE = 2; // 2244 x 1588 px 高解像度
+  const LAYOUT_CFG = window.HomeLayoutConfig || {};
+  const SHEET_W = LAYOUT_CFG.widthPx || 1122;
+  const SHEET_H = LAYOUT_CFG.heightPx || 794;
+  const SCALE = LAYOUT_CFG.pngScale || 2; // 2244 x 1588 px 高解像度
   const FONT_FAMILY = '"BIZ UDPGothic", "Meiryo", "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif';
 
   function loadImg(src) {
