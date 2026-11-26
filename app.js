@@ -8,7 +8,7 @@
   // ---------- Constants ----------
   // キャッシュ対策バージョン：index.html の <meta name="asset-version"> と各 ?v= と必ず同じ値にする
   // （更新時は index.html と app.js の現在の値をまとめて置換。ずれているとコンソールに警告が出ます）
-  const APP_VERSION = '2026112601';
+  const APP_VERSION = '2026112602';
   const KEYS = {
     state: 'home_newsletter_state_v1',
     base: 'home_newsletter_default_schedule_v1',
@@ -748,7 +748,9 @@
     box.innerHTML = '';
     const head = document.createElement('div');
     head.className = 'sch-headrow';
-    head.innerHTML = '<span>日付</span><span>種類</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>給</span><span>清</span><span>部</span>';
+    head.innerHTML =
+      '<div class="sch-head-top"><span>日付</span><span>種類</span><span>給</span><span>清</span><span>部</span></div>' +
+      '<div class="sch-head-periods"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span></div>';
     box.appendChild(head);
 
     const cells = weekCells();
@@ -776,40 +778,27 @@
         if (row.type === 'normal') row.eventText = '';
         renderScheduleEditor();
         commit();
+        const curDay = box.querySelectorAll('.sch-day')[i];
+        if (!curDay) return;
         if (row.type !== 'normal') {
-          const inp = box.querySelectorAll('.sch-day')[i].querySelector('.sch-wide, .sch-wide-all');
+          const inp = curDay.querySelector('.sch-wide, .sch-wide-all');
           if (inp) inp.focus();
+        } else {
+          const newSel = curDay.querySelector('.sch-type');
+          if (newSel) newSel.focus();
         }
       });
       l1.appendChild(sel);
-
-      if (row.type === 'normal') {
-        row.periods.forEach((p, pi) => {
-          const inp = document.createElement('input');
-          inp.type = 'text';
-          inp.value = p;
-          inp.maxLength = 6;
-          inp.setAttribute('aria-label', `${pi + 1}限`);
-          inp.addEventListener('input', () => { row.periods[pi] = inp.value; commit(); });
-          l1.appendChild(inp);
-        });
-      } else {
-        const wide = document.createElement('input');
-        wide.type = 'text';
-        wide.className = row.type === 'holiday' ? 'sch-wide-all' : 'sch-wide';
-        wide.placeholder = row.type === 'holiday' ? '例）勤労感謝の日・振替休業日' : '例）合唱コンクール・校外学習';
-        wide.value = row.eventText;
-        wide.addEventListener('input', () => { row.eventText = wide.value; row.autoHoliday = false; commit(); });
-        l1.appendChild(wide);
-      }
 
       if (row.type !== 'holiday') {
         ['lunch', 'clean', 'club'].forEach((k) => {
           const fb = document.createElement('button');
           fb.type = 'button';
           fb.className = `flag-btn ${row[k] === '×' ? 'is-x' : ''}`;
+          fb.dataset.label = { lunch: '給', clean: '清', club: '部' }[k];
           fb.textContent = row[k] || '　';
           fb.title = { lunch: '給食', clean: '清掃', club: '部活動' }[k];
+          fb.setAttribute('aria-label', { lunch: '給食', clean: '清掃', club: '部活動' }[k]);
           fb.addEventListener('click', () => {
             row[k] = FLAG_CYCLE[(FLAG_CYCLE.indexOf(row[k]) + 1) % FLAG_CYCLE.length];
             fb.textContent = row[k];
@@ -818,19 +807,50 @@
           });
           l1.appendChild(fb);
         });
+      } else if (row.autoHoliday) {
+        const autoTag = document.createElement('span');
+        autoTag.className = 'sch-auto';
+        autoTag.textContent = '🎌 祝日を自動で反映';
+        l1.appendChild(autoTag);
       }
       day.appendChild(l1);
 
+      const periodsRow = document.createElement('div');
+      periodsRow.className = 'sch-periods';
+      if (row.type === 'normal') {
+        row.periods.forEach((p, pi) => {
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.value = p;
+          inp.maxLength = 6;
+          inp.placeholder = `${pi + 1}限`;
+          inp.setAttribute('aria-label', `${pi + 1}限`);
+          inp.addEventListener('input', () => { row.periods[pi] = inp.value; commit(); });
+          periodsRow.appendChild(inp);
+        });
+      } else {
+        const wide = document.createElement('input');
+        wide.type = 'text';
+        wide.className = row.type === 'holiday' ? 'sch-wide-all' : 'sch-wide';
+        wide.placeholder = row.type === 'holiday' ? '例）勤労感謝の日・振替休業日' : '例）合唱コンクール・校外学習';
+        wide.value = row.eventText;
+        wide.setAttribute('aria-label', row.type === 'holiday' ? '休みの内容' : '行事の内容');
+        wide.addEventListener('input', () => { row.eventText = wide.value; row.autoHoliday = false; commit(); });
+        periodsRow.appendChild(wide);
+      }
+      day.appendChild(periodsRow);
+
       const l2 = document.createElement('div');
-      l2.className = 'sch-line2';
+      l2.className = `sch-line2 ${row.type === 'holiday' ? 'is-holiday-note' : ''}`;
       if (row.type === 'holiday') {
-        l2.innerHTML = `<span></span><span class="sch-auto">${row.autoHoliday ? '🎌 祝日を自動で反映' : ''}</span>`;
+        const lab = document.createElement('label');
+        lab.textContent = '備考';
         const note = document.createElement('input');
         note.type = 'text';
         note.placeholder = '備考（任意）';
         note.value = row.note;
         note.addEventListener('input', () => { row.note = note.value; commit(); });
-        l2.appendChild(note);
+        l2.append(lab, note);
       } else {
         const lab = document.createElement('label');
         lab.textContent = '帰学';
