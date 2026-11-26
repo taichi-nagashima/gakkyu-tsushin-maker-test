@@ -26,8 +26,18 @@ window.HomeDocxBuilder = (() => {
     }
     return (crc ^ 0xffffffff) >>> 0;
   }
-
-  function createZipBlob(entries, mimeType) {
+  async function compressDeflateRaw(bytes) {
+     if (typeof CompressionStream !== 'function') return null;
+     try {
+        const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+        const compressedBuffer = await new Response(stream).arrayBuffer();
+        return new Uint8Array(compressedBuffer);
+        } catch (_err) {
+        return null;
+     }
+  }
+   
+  async function createZipBlob(entries, mimeType) {
     const encoder = new TextEncoder();
     const localParts = [];
     const centralParts = [];
@@ -42,24 +52,35 @@ window.HomeDocxBuilder = (() => {
       const dataBytes = typeof entry.data === 'string' ? encoder.encode(entry.data) : entry.data;
       const crc = crc32(dataBytes);
       const size = dataBytes.length;
-
+      const isCompressible = typeof entry.data === 'string' || /\.(xml|rels|txt)$/i.test(entry.name);
+       let payloadBytes = dataBytes;
+       let method = 0;
+       if (isCompressible && size > 0) {
+          const compressed = await compressDeflateRaw(dataBytes);
+          if (compressed && compressed.length < size) {
+             payloadBytes = compressed;
+             method = 8;
+            }
+       }
+       const compressedSize = payloadBytes.length;
+       
       // Local File Header (30 bytes + name)
       const localHeader = new Uint8Array(30 + nameBytes.length);
       const lv = new DataView(localHeader.buffer);
       lv.setUint32(0, 0x04034b50, true); // signature
       lv.setUint16(4, 20, true);         // version needed
       lv.setUint16(6, 0x0800, true);     // UTF-8 flag
-      lv.setUint16(8, 0, true);          // method: store
+      lv.setUint16(8, method, true);          // method: store
       lv.setUint16(10, dosTime, true);
       lv.setUint16(12, dosDate, true);
       lv.setUint32(14, crc, true);
-      lv.setUint32(18, size, true);
+      lv.setUint32(18, compressedSize, true);
       lv.setUint32(22, size, true);
       lv.setUint16(26, nameBytes.length, true);
       lv.setUint16(28, 0, true);
       localHeader.set(nameBytes, 30);
 
-      localParts.push(localHeader, dataBytes);
+      localParts.push(localHeader, payloadBytes);
 
       // Central Directory Header (46 bytes + name)
       const centralHeader = new Uint8Array(46 + nameBytes.length);
@@ -68,11 +89,11 @@ window.HomeDocxBuilder = (() => {
       cv.setUint16(4, 20, true);         // version made by
       cv.setUint16(6, 20, true);         // version needed
       cv.setUint16(8, 0x0800, true);     // UTF-8 flag
-      cv.setUint16(10, 0, true);         // method: store
+      cv.setUint16(10, method, true);         // method: store
       cv.setUint16(12, dosTime, true);
       cv.setUint16(14, dosDate, true);
       cv.setUint32(16, crc, true);
-      cv.setUint32(20, size, true);
+      cv.setUint32(20, compressedSize, true);
       cv.setUint32(24, size, true);
       cv.setUint16(28, nameBytes.length, true);
       cv.setUint16(30, 0, true);
@@ -84,7 +105,7 @@ window.HomeDocxBuilder = (() => {
       centralHeader.set(nameBytes, 46);
 
       centralParts.push(centralHeader);
-      offset += localHeader.length + size;
+      offset += localHeader.length + compressedSize;
     }
 
     const centralSize = centralParts.reduce((acc, p) => acc + p.length, 0);
